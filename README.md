@@ -10,4 +10,8 @@ coding file index:
 
 01_... data simulation;
 
-02_... Bayesian analysis in Rstan package.
+02_... Bayesian analysis of simulated data in Rstan package.
+
+03_... real data pretreatment.
+
+02_... Bayesian analysis of real data in Rstan package.
