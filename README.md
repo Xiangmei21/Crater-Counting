@@ -14,4 +14,4 @@ coding file index:
 
 03_... real data pretreatment.
 
-02_... Bayesian analysis of real data in Rstan package.
+04_... Bayesian analysis of real data in Rstan package.
