@@ -1,24 +1,55 @@
 ###simulate a crater data
 
-####set:real density rho, area A , crater number N~Poisson(rho*A)
+plotcircle = function(dat,colour="green"){
+  x<-NULL;y<-NULL
+  plot(x,y,type = "n",xlim=c(min(dat[,1])-max(dat[,3]),max(dat[,1])+max(dat[,3])),
+       ylim=c(min(dat[,2])-max(dat[,3]),max(dat[,2])+max(dat[,3])))
+  nseg=360;i=1
+  for (i in 1:nrow(dat)){
+    x.cent <- dat[i,1]
+    y.cent <- dat[i,2]
+    r <- dat[i,3]/2
+    xx <- x.cent + r*cos( seq(0,2*pi, length.out=nseg) )
+    yy <- y.cent + r*sin( seq(0,2*pi, length.out=nseg) )
+    lines(xx,yy, col=colour)
+  }
+}
+
+
+linecircle = function(data,colour="red"){
+  nseg=360;i=1
+  for (i in 1:nrow(data)){
+    x.cent <- data[i,1]+1
+    y.cent <- data[i,2]
+    r <- data[i,3]/2
+    xx <- x.cent + r*cos( seq(0,2*pi, length.out=nseg) )
+    yy <- y.cent + r*sin( seq(0,2*pi, length.out=nseg) )
+    lines(xx,yy, col=colour)
+  }
+}
+
+
+
+###set:real density rho, area A , crater number N~Poisson(rho*A)
 set.seed(43); N <- rpois(1,2000) ###rho=2000
 N ##crater number
-set.seed(121); x <- runif(N,0,2000)
-set.seed(17); y <- runif(N,0,2000) 
-# x;y##location
+## simulate locations
+set.seed(82); locations <- matrix(runif(4*N,0,2000),byrow = T,ncol=2)
+## remove overlaps
+simtree <- as.dendrogram(hclust(dist(locations),method="average"))
+plot(simtree,ylim = c(0,100),xlim=c(1000,1500),leaflab = "none")
+cutsim <- cut(simtree, h = 19)   ## at least N non overlaping locations
+nsim <- length(cutsim$lower)  
+new_loc=NULL
+for (i in 1:nsim){  
+  leaf=cutsim$lower[[i]]
+  r <- as.numeric(unlist(leaf))   
+  new_loc <- rbind(new_loc,locations[r[1],]) 
+}
+## randomlly sample N locations out of nsim non overlapping locations
+set.seed(59);real_loc <- new_loc[sample(1:nsim,N),] 
+x = real_loc[,1]; y = real_loc[,2]
 plot(x,y,xlim=c(0,2000),ylim=c(0,2000))
-
-##size pdf : f(s|theta0,theta1)=theta1 * exp(theta0) * s^(theta1-1) where s=diameter
-### 0< s <exp(-theta0/theta1) where set 
-
-##upper=exp(-theta0/theta1);integrate(f,lower=0,upper=upper)
-#theta1=0.4; theta0=-0.2
-#f <- function(s) theta1 * exp(theta0) * s^(theta1-1)
-#hh <- seq(0,exp(-theta0/theta1),length.out=1000)
-#plot(hh,f(hh),type="l",ylim=c(0,20),xlim=c(0,exp(-theta0/theta1)))
-#set.seed(233);u <- runif(N,0,1)
-## size <- (exp(-theta0)* u)^(1/theta1)   ###sampling size from s=F^-1(uniform)
-
 #---gamma dsn for size
 curve(dgamma(x,2.3,.1),0,100,col=2)  ### <--size param
 set.seed(233);size=rgamma(N,2.3,.1)
@@ -27,36 +58,30 @@ hist(size,breaks=50,probability = T)
 head(sort(size),30)
 real<- data.frame(x,y,size)
 
-plot(x,y,type = "n",xlim=c(0,2000),ylim=c(0,2000))
-nseg=360;i=1
-for (i in 1:N){
-  x.cent <- real[i,1]
-  y.cent <- real[i,2]
-  r <- real[i,3]/2
-  xx <- x.cent + r*cos( seq(0,2*pi, length.out=nseg) )
-  yy <- y.cent + r*sin( seq(0,2*pi, length.out=nseg) )
-  lines(xx,yy, col='red')
-}
+plotcircle(real)
 
-
-## miss prob p(s|t,r)=I(s<r)+t*I(s>=r)  set r=0.01, t=0.2 ==> Bernoulli
+## miss prob p(s|t,r)=I(s<r)+t*I(s>=r)  ==> Bernoulli
 ## phantom pdf may simply be h(s) = Unif(0,1)...
 
 ## phantom intensity : set rho1*A=50 F~Poisson(rho1*A)  
 
 see<-real[-which(size<3),]  ##<-- observing criteria=3
-nsmall <-sum(size<3)  ##miss for each
+nsmall <-sum(size<3)  ## miss # for small size 
 
 ####now consider 10 observers:
 
 set.seed(63);miss <- rbinom(10*(N-nsmall),1,0.2) ## miss 
 sum(miss)/sum(10*(N-nsmall)) ### 1=miss
 nsee=N-nsmall
-n=NULL
+miss_byeach=matrix(nrow=10,ncol=nsee)
+miss_byall=rep(1,nsee)
 for (i in 1:10){
-  n[i]=sum(miss[1:nsee+nsee*(i-1)]==1)
+  miss_byeach[i,]=miss[1:nsee+nsee*(i-1)]
+  miss_byall = miss_byall & miss[1:nsee+nsee*(i-1)]
 }
-n  #  miss # for observers 
+sum(miss_byall)  #  miss # for all observers 
+rowSums(miss_byeach)     #  miss # for each observer
+which(colSums(miss_byeach) >7)  # misspattern of each crater 
 
 
 set.seed(1);phantom <- rpois(10,50)  ## <--obs=10, phantom rho1*A=50
@@ -64,7 +89,9 @@ phantom ### phantom num
 
 set.seed(9);ph.size <- rgamma(sum(phantom),3,.1)###gamma dsn for phantom size
 hist(ph.size,breaks=100,probability = T)
-set.seed(89);ph.x <- runif(sum(phantom),0,2000);ph.y <- runif(sum(phantom),0,2000)
+
+set.seed(59);ph_loc <- new_loc[-sample(1:nsim,N),][1:sum(phantom),]
+set.seed(90);ph.x <- ph_loc[,1]; ph.y <- ph_loc[,2]
 plot(ph.x,ph.y,xlim=c(0,2000),ylim=c(0,2000),"p")
 
 ph <-as.data.frame(cbind(ph.x,ph.y,ph.size,rep(1:10,phantom)))
@@ -85,41 +112,52 @@ obdat[[7]]  ###  list for 10 observers (real-miss+phantom)
 
 simdata  ### simdata :data frame of all observations
 
-save(simdata,file="/Users/zhang/Desktop/simdata.Rdata",ascii = F)
+###add random error for sizes and locations
+set.seed(689);simdata$size <- simdata$size*rnorm(nrow(simdata),1,0.001)
+set.seed(687);simdata$x <- simdata$x*rnorm(nrow(simdata),1,0.0001)
+set.seed(686);simdata$y <- simdata$y*rnorm(nrow(simdata),1,0.0001)
 
+save(simdata,file="./data/simdata.Rdata",ascii = F)
+# load("./data/simdata.Rdata")
 
 nob=table(simdata$ob)
 
 ####### try simdata and plot!
-set.seed(689);obsize <- simdata$size*rnorm(nrow(simdata),1,0.005)  ###add random error for size
-try <- cbind(simdata[,1:2],size=obsize,ob=simdata[,4])
-x=NULL;y=NULL
-plot(x,y,type = "n",xlim=c(0,2000),ylim=c(0,2000))
-nseg=360;i=1
-for (i in 1:nrow(try)){
-  x.cent <- try[i,1]
-  y.cent <- try[i,2]
-  r <- try[i,3]/2
-  xx <- x.cent + r*cos( seq(0,2*pi, length.out=nseg) )
-  yy <- y.cent + r*sin( seq(0,2*pi, length.out=nseg) )
-  lines(xx,yy, col='red')
-}
+try <- simdata
+plotcircle(try)
 
-###clustering...it works!
-dtry <- cbind(try[,1:2],try[,3]*.5)   ### dist=sqrt(dx^2+dy^2+dr^2*coef) 
-fn = function(x,y) sqrt(sum((x-y)^2))/min(x[3],y[3])  ### dist/min(r1,r2) define!!
+###clustering...
+dtry <- cbind(try[,1:2],try[,3]*0.5)   ### dist=sqrt(dx^2+dy^2+dr^2*coef) 
+fn = function(x,y) sqrt(sum((x-y)^2))/(min(x[3],y[3])) ### dist/min(r1,r2) define!!
 datdist <- proxy::dist(dtry, method=fn)
-hc <- hclust(datdist,method="average") 
+hc <- hclust(datdist,method="single") 
 ### cluster method:one of "ward.D", "ward.D2", "single", "complete", "average" (= UPGMA), "mcquitty" (= WPGMA), "median" (= WPGMC) or "centroid" (= UPGMC)
 hcd <- as.dendrogram(hc)
-plot(hcd,ylim = c(0,10),xlim=c(1000,1500))
-abline(h=.2,col="red")  ###plot the clustering and criteria line!
+# save(hcd, file="./data/hcd_simdata_clustering.Rdata")
+load("./data/hcd_simdata_clustering.Rdata")
+load("./data/hcd_single_simdata_clustering.Rdata")
+load("./data/hcd_complete_simdata_clustering.Rdata")
+load("./data/hcd_ward_simdata_clustering.Rdata")
 
+plot(hcd_single,ylim = c(0,10),xlim=c(1800,2500),leaflab = "none")
+abline(h=.5,col="red")  ###plot the clustering and criteria line!
 
-cuth <- cut(hcd, h = 0.18)   #### problem: how to set a "good" height criteria
+cuth <- cut(hcd_single, h = .5)   #### set a "good" height criteria
 nbranch <- length(cuth$lower)
-plot(cuth$lower[[109]])      ### branches which height under 0.2
-cuth$lower
+leaves=NULL
+for (i in 1:nbranch){
+  leaves[i]=length(unlist(cuth$lower[[i]]))
+}
+# ------ check inconsistency---------
+max(leaves) ##need <=10
+which(leaves >10 )
+plot(cuth$lower[[which.max(leaves)]]) 
+for (i in which(leaves >10 )){
+  plot(cuth$lower[[i]],main=i) 
+  plotcircle(try[unlist(cuth$lower[[i]]),])
+}
+
+#-------------------------------------
 
 try1<-as.matrix(try[,1:3])
 for (i in 1:nbranch){
@@ -131,27 +169,9 @@ for (i in 1:nbranch){
 try_d <- cbind(try1,ob=try$ob)  ### pretreatment simdata!!! got it
 
 ##plot after clustering
-x<-NULL;y<-NULL
-plot(x,y,type = "n",xlim=c(0,2000),ylim=c(0,2000))
-nseg=360;i=1
-for (i in 1:nrow(try)){
-  x.cent <- try[i,1]
-  y.cent <- try[i,2]
-  r <- try[i,3]/2
-  xx <- x.cent + r*cos( seq(0,2*pi, length.out=nseg) )
-  yy <- y.cent + r*sin( seq(0,2*pi, length.out=nseg) )
-  lines(xx,yy, col='green')
-}
+plotcircle(try)
 
-nseg=360;i=1
-for (i in 1:nrow(try1)){
-  x.cent <- try1[i,1]+.1
-  y.cent <- try1[i,2]
-  r <- try1[i,3]/2
-  xx <- x.cent + r*cos( seq(0,2*pi, length.out=nseg) )
-  yy <- y.cent + r*sin( seq(0,2*pi, length.out=nseg) )
-  lines(xx,yy, col='red')
-}
+linecircle(try1)
 
 ####### test ....
 try_n2 <- sum(table(try_d[,3])!=1) ## repeated record N_2+
@@ -175,8 +195,11 @@ tryn2 <- tryx[tryx[,2]!=1,]
 trys1=tryx[tryx[,2]==1,][,1]
 tryn1=try_d[,3:4][try_d[,3] %in% as.character(trys1),] ## same as try_sj
 
-save(tryn2,file="/Users/zhang/Desktop/bsimdata-2.Rdata")
-save(tryn1,file="/Users/zhang/Desktop/bsimdata-1.Rdata")
+hist(tryn1[,1],breaks=50,probability = T)
+hist(ph.size,breaks=50,probability = T)
+
+save(tryn2,file="./data/bsimdata-2.Rdata")
+save(tryn1,file="./data/bsimdata-1.Rdata")
 
 hist(size,probability = T,breaks=150)
 hist(tryx[,1],probability = T,breaks=150)

@@ -1,6 +1,6 @@
 
-load("\\\\my.files.iastate.edu\\Users\\xmzhang\\Desktop\\crater counting\\bsimdata-1.Rdata")
-load("\\\\my.files.iastate.edu\\Users\\xmzhang\\Desktop\\crater counting\\bsimdata-2.Rdata")
+load("./data/bsimdata-1.Rdata")
+load("./data/bsimdata-2.Rdata")
 
 (dj=table(tryn1[,2]))
 
@@ -44,11 +44,11 @@ q0 = gamma_cdf(gamma[1],beta[1],beta[2])+p^J*(1-gamma_cdf(gamma[1],beta[1],beta[
 }
 model {
 
-gamma[1] ~ exponential(.5);           // ??? gamma1 :small crater r 
-gamma[2] ~ beta(2,2);                //prior ?? gamma2 :prob miss when s>r
+gamma[1] ~ gamma(12,4);                // gamma1 :small crater r 
+gamma[2] ~ beta(2,2);                //gamma2 :prob miss when s>r
 beta[1] ~ gamma(1,.5);              //+
 beta[2] ~ gamma(1,.5);              //
-eta[1] ~ gamma(1,.5);              //+
+eta[1] ~ gamma(2.5,.5);              //+
 eta[2] ~ gamma(1,.5); 
 
 N2 ~ poisson(q2*rho);
@@ -72,33 +72,65 @@ target += -q0*rho+N0*log(q0*rho)-lgamma(N0+1);
 "  
  
 dat = list(J=10,N2=nrow(tryn2),N1=sum(dj),dat2s=tryn2[,1],dat2n=tryn2[,2],datj= tryj)
-bfit = stan(model_code = crater.model, data = dat, iter = 1000, chains=4)
-bfit
+simfit = stan(model_code = crater.model, data = dat, iter = 1000, chains=4)
+simfit
+round(summary(simfit,probs = c(0.025, 0.975))$summary,2)[,-6]
+## save(simfit,file="./data/simfit.Rdata")
+
 ## para values for large simulation data J=10
 #  rho = 2000 , rhoj=50
 #  # ## missing prob =1 when size<3 / =0.2 when size>3
 #  size pdf gamma(2.3,0.1)
 ## phantom size gamma(3,0.1)
 ###in simulation DATA: N=rpois(rho)=1998 #size<3=29=N0
-plot(bfit)
-e <- extract(bfit)
+plot(simfit)
+e <- extract(simfit)
 plot(e$gamma[,2],e$rho)
-plot(1:length(e$gamma[,2]),e$gamma[,2],"l")
-plot(1:length(e$rhoj),e$gamma[,1],"l")
-plot(1:length(e$gamma[,2]),e$rho,"l")
-plot(1:length(e$gamma[,2]),e$N0,"l")
+plot(1:length(e$rho),e$gamma[,2],"l")
+plot(1:length(e$rho),e$gamma[,1],"l")
+plot(1:length(e$rho),e$rho,"l")
+plot(1:length(e$rho),e$N0,"l")
 plot(1:length(e$rho),e$beta[,2],"l")
 plot(1:length(e$rho),e$beta[,1],"l")
+plot(1:length(e$rho),e$eta[,1],"l")
+plot(1:length(e$rho),e$eta[,2],"l")
 plot(e$q2,e$rho)
 
 quantile(e$q2*e$rho,c(0.025,0.975))
 
+#---------------
+library(ggplot2)
+n0 = data.frame(N0=e$N0,gamma1=e$gamma[,1],rho=e$rho)
+ggplot(data = n0,aes(gamma1,N0))+geom_point(alpha=0.3)+
+  theme_classic()+labs(title=expression(paste("Posterior draws for ",N[0]," and ",gamma[1])),
+                       x=expression(gamma[1]),y=expression(N[0])) +
+  theme(plot.title = element_text(hjust = 0.5,size=16, face="bold"),
+        axis.text=element_text(size=12),
+        axis.title = element_text(color="black", face="bold", size=14))
 
+ggplot(data = n0,aes(gamma1,rho))+geom_point(alpha=0.3)+
+  theme_classic()+labs(title=expression(paste("Posterior draws for ",rho," and ",gamma[1])),
+                       x=expression(gamma[1]),y=expression(rho)) +
+  theme(plot.title = element_text(hjust = 0.5,size=16, face="bold"),
+        axis.title.y=element_text(angle=0,vjust = 0.5),
+        axis.text=element_text(size=12),
+        axis.title = element_text(color="black", face="bold", size=14))
+## real size density
 beta1=mean(e$beta[,1])
 beta2=mean(e$beta[,2])
-hist(c(tryn1[,1],tryn2[,1]),breaks=50,probability = T)
-curve(dgamma(x,beta1,beta2),0,200,ylim=c(0,3),add=T,col=3)
-curve(dgamma(x,2.3,.1),0,200,ylim=c(0,3),add=T,col=2)## red true para
+hist(c(tryn1[,1],tryn2[,1]),breaks=50,probability = T,xlab="crater diameter",main="posterior estimates of size density")
+curve(dgamma(x,2.52,0.1),0,200,ylim=c(0,3),add=T,col=3,lwd=2)
+curve(dgamma(x,2.3,.1),0,200,ylim=c(0,3),add=T,col=2,lwd=2,lty=2)## red true para
+legend("topright",legend=expression(paste("(",beta[1],",",beta[2],")=True values"),
+                                    paste("(",beta[1],",",beta[2],")=Posterior means")),lwd=2,lty=c(1,2),col=c(3,2))
+
+# phantom size density
+eta1=mean(e$eta[,1])
+eta2=mean(e$eta[,2])
+hist(tryn1[,1],breaks=50,probability = T)
+hist(ph.size,breaks=50,probability = T)
+curve(dgamma(x,eta1,eta2),0,200,add=T,col=3)
+curve(dgamma(x,3,.1),0,200,add=T,col=2)
 
 bfit
 J=10;p=0.2;gamma <- c(3,0.2);beta=c(2.3,0.1)
